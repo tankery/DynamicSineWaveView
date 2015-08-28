@@ -2,6 +2,7 @@ package me.tankery.app.dynamicsinewave;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PointF;
@@ -25,9 +26,9 @@ public class DynamicSineWaveView extends View {
     private static final int POINTS_FOR_CYCLE = 10;
 
     public static class Wave {
-        public float amplitude; // wave amplitude, in dimension unit
+        public float amplitude; // wave amplitude, relative to view, range from 0 ~ 0.5
         public float cycle;     // contains how many cycles in scene
-        public float speed;     // dimens per second
+        public float speed;     // space per second, relative to view. X means the wave move X times of width per second
 
         public Wave(float a, float c, float s) {
             this.amplitude = a;
@@ -44,9 +45,12 @@ public class DynamicSineWaveView extends View {
 
     private final List<Wave> waveConfigs = new ArrayList<>();
     private final List<Paint> wavePaints = new ArrayList<>();
+    private final Paint mappedPaint = new Paint();
 
     private int viewWidth = 0;
     private int viewHeight = 0;
+
+    private float baseWaveAmplitudeFactor = 0.1f;
 
     /**
      * The computation result, a set of wave path can draw.
@@ -90,15 +94,27 @@ public class DynamicSineWaveView extends View {
         init();
     }
 
+    private void init() {
+        if (isInEditMode()) {
+            addWave(0.5f, 0.5f, 0, 0, 0);
+            addWave(0.5f, 2.5f, 0, Color.YELLOW, 2);
+            addWave(0.3f, 2f, 0, Color.RED, 2);
+            setBaseWaveAmplitudeFactor(1);
+            tick();
+            return;
+        }
+        createComputationThread().start();
+    }
+
     /**
      * Add new wave to the view.
      *
      * The first added wave will become the 'base wave', which ignored the color & stroke, and
      * other wave will multiple with the 'base wave'.
      *
-     * @param amplitude wave amplitude, in dimension
+     * @param amplitude wave amplitude, relative to view, range from 0 ~ 0.5
      * @param cycle contains how many cycles in scene
-     * @param speed wave moves speed, in dimens per second
+     * @param speed space per second, relative to view. X means the wave move X times of width per second
      * @param color the wave color, ignored when add the 'base wave'
      * @param stroke wave stroke width, in dimension, ignored when add the 'base wave'
      * @return wave count (exclude the base wave).
@@ -136,6 +152,10 @@ public class DynamicSineWaveView extends View {
         removeCallbacks(animateTicker);
     }
 
+    public void setBaseWaveAmplitudeFactor(float factor) {
+        baseWaveAmplitudeFactor = factor;
+    }
+
     @Override
     public void onDraw(Canvas canvas) {
         if (transferPathsQueue.isEmpty())
@@ -150,11 +170,14 @@ public class DynamicSineWaveView extends View {
 
         canvas.save();
         canvas.translate(0, viewHeight / 2);
+        canvas.scale(viewWidth, viewHeight);
         for (int i = 0; i < paths.size(); i++) {
             Path path = paths.get(i);
             Paint paint = wavePaints.get(i);
 
-            canvas.drawPath(path, paint);
+            mappedPaint.set(paint);
+            mappedPaint.setStrokeWidth(paint.getStrokeWidth() / viewWidth);
+            canvas.drawPath(path, mappedPaint);
         }
         canvas.restore();
     }
@@ -165,12 +188,6 @@ public class DynamicSineWaveView extends View {
 
         viewWidth = getWidth();
         viewHeight = getHeight();
-    }
-
-    private void init() {
-        if (isInEditMode())
-            return;
-        createComputationThread().start();
     }
 
     private Thread createComputationThread() {
@@ -190,87 +207,89 @@ public class DynamicSineWaveView extends View {
                         }
                     }
 
-                    List<Wave> waveList;
-                    List<Path> newPaths;
-
-                    synchronized (waveConfigs) {
-                        if (waveConfigs.size() < 2)
-                            continue;
-
-                        waveList = new ArrayList<>(waveConfigs.size());
-                        newPaths = new ArrayList<>(waveConfigs.size());
-
-                        for (Wave o : waveConfigs) {
-                            waveList.add(new Wave(o));
-                        }
+                    // If tick has new data offered, post a invalidate notify.
+                    if (tick()) {
+                        postInvalidate();
                     }
-
-                    long currentTime = SystemClock.uptimeMillis();
-                    float t = (currentTime - startAnimateTime) / 1000f;
-
-                    float maxCycle = 0;
-                    float maxAmplitude = 0;
-                    for (Wave w : waveList) {
-                        if (w.cycle > maxCycle)
-                            maxCycle = w.cycle;
-                        if (w.amplitude > maxAmplitude)
-                            maxAmplitude = w.amplitude;
-                    }
-                    int pointCount = (int) (POINTS_FOR_CYCLE * maxCycle);
-
-                    Wave baseWave = waveList.get(0);
-                    waveList.remove(0);
-
-                    float normal = baseWave.amplitude / (baseWave.amplitude * maxAmplitude);
-                    List<PointF> baseWavePoints = generateSineWave(baseWave.amplitude, baseWave.cycle, - baseWave.speed * t, pointCount);
-
-                    for (Wave w : waveList) {
-                        float space = - w.speed * t;
-
-                        List<PointF> wavePoints = generateSineWave(w.amplitude, w.cycle, space, pointCount);
-                        if (wavePoints.size() != baseWavePoints.size()) {
-                            throw new RuntimeException("base wave point size " + baseWavePoints.size() +
-                                    " not match the sub wave point size " + wavePoints.size());
-                        }
-
-                        // multiple up
-                        for (int i = 0; i < wavePoints.size(); i++) {
-                            PointF p = wavePoints.get(i);
-                            PointF base = baseWavePoints.get(i);
-                            p.set(p.x, p.y * base.y * normal);
-                        }
-
-                        Path path = generatePathForCurve(wavePoints);
-                        newPaths.add(path);
-                    }
-
-                    // offer the new wave paths & post invalidate to redraw.
-                    transferPathsQueue.offer(newPaths);
-                    postInvalidate();
                 }
             }
         });
     }
 
-    private List<PointF> generateSineWave(float amplitude, float cycle, float offset, int pointCount) {
-        int w = viewWidth;
-        int h = viewHeight;
-        if (amplitude > h / 2f) {
-            amplitude = h / 2f;
+    private boolean tick() {
+        List<Wave> waveList;
+        List<Path> newPaths;
+
+        synchronized (waveConfigs) {
+            if (waveConfigs.size() < 2)
+                return false;
+
+            waveList = new ArrayList<>(waveConfigs.size());
+            newPaths = new ArrayList<>(waveConfigs.size());
+
+            for (Wave o : waveConfigs) {
+                waveList.add(new Wave(o));
+            }
         }
 
+        long currentTime = SystemClock.uptimeMillis();
+        float t = (currentTime - startAnimateTime) / 1000f;
+
+        float maxCycle = 0;
+        float maxAmplitude = 0;
+        for (int i = 0; i < waveList.size(); i++) {
+            Wave w = waveList.get(i);
+            if (w.cycle > maxCycle)
+                maxCycle = w.cycle;
+            if (w.amplitude > maxAmplitude && i > 0)
+                maxAmplitude = w.amplitude;
+        }
+        int pointCount = (int) (POINTS_FOR_CYCLE * maxCycle);
+
+        Wave baseWave = waveList.get(0);
+        waveList.remove(0);
+
+        float normal = baseWaveAmplitudeFactor * baseWave.amplitude / maxAmplitude;
+        List<PointF> baseWavePoints = generateSineWave(baseWave.amplitude, baseWave.cycle, - baseWave.speed * t, pointCount);
+
+        for (Wave w : waveList) {
+            float space = - w.speed * t;
+
+            List<PointF> wavePoints = generateSineWave(w.amplitude, w.cycle, space, pointCount);
+            if (wavePoints.size() != baseWavePoints.size()) {
+                throw new RuntimeException("base wave point size " + baseWavePoints.size() +
+                        " not match the sub wave point size " + wavePoints.size());
+            }
+
+            // multiple up
+            for (int i = 0; i < wavePoints.size(); i++) {
+                PointF p = wavePoints.get(i);
+                PointF base = baseWavePoints.get(i);
+                p.set(p.x, p.y * base.y * normal);
+            }
+
+            Path path = generatePathForCurve(wavePoints);
+            newPaths.add(path);
+        }
+
+        // offer the new wave paths & post invalidate to redraw.
+        transferPathsQueue.offer(newPaths);
+        return true;
+    }
+
+    private List<PointF> generateSineWave(float amplitude, float cycle, float offset, int pointCount) {
         int count = pointCount;
         if (count <= 0)
             count = (int) (POINTS_FOR_CYCLE * cycle);
-        double T = w / cycle;
+        double T = 1. / cycle;
         double f = 1f / T;
 
         List<PointF> points = new ArrayList<>(count);
-        if (count < 2 || w == 0 || h == 0)
+        if (count < 2)
             return points;
 
-        for (int i = 0; i < count; i++) {
-            double x = i * w / (count - 1);
+        double dx = 1. / (count - 1);
+        for (double x = 0; x <= 1; x+= dx) {
             double y = amplitude * Math.sin(2 * Math.PI * f * (x + offset));
             points.add(new PointF((float) x, (float) y));
         }
