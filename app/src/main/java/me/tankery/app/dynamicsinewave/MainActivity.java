@@ -15,8 +15,9 @@ public class MainActivity extends Activity {
 
         dynamicSineWaveView = (DynamicSineWaveView) findViewById(R.id.view_sine_wave);
         dynamicSineWaveView.addWave(0.5f, 0.5f, 0, 0, 0);
-        dynamicSineWaveView.addWave(0.2f, 2f, 1, getResources().getColor(android.R.color.holo_red_dark), 2);
-//        dynamicSineWaveView.addWave(0.1f, 2f, 3, getResources().getColor(android.R.color.holo_blue_dark), 2);
+        dynamicSineWaveView.addWave(0.5f, 2f, 0.5f, getResources().getColor(android.R.color.holo_red_dark), 2);
+        dynamicSineWaveView.addWave(0.1f, 2f, 0.7f, getResources().getColor(android.R.color.holo_blue_dark), 2);
+        dynamicSineWaveView.setBaseWaveAmplitudeFactor(1);
         dynamicSineWaveView.startAnimation();
     }
 

@@ -3,6 +3,7 @@ package me.tankery.app.dynamicsinewave;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PointF;
@@ -45,7 +46,7 @@ public class DynamicSineWaveView extends View {
 
     private final List<Wave> waveConfigs = new ArrayList<>();
     private final List<Paint> wavePaints = new ArrayList<>();
-    private final Paint mappedPaint = new Paint();
+    private final Matrix wavePathScale = new Matrix();
 
     private int viewWidth = 0;
     private int viewHeight = 0;
@@ -71,10 +72,7 @@ public class DynamicSineWaveView extends View {
 
     private Runnable animateTicker = new Runnable() {
         public void run() {
-            synchronized (requestCondition) {
-                requestFutureChange = true;
-                requestCondition.notify();
-            }
+            requestUpdateFrame();
             postDelayed(this, 20); // 20ms == 60fps
         }
     };
@@ -103,6 +101,7 @@ public class DynamicSineWaveView extends View {
             tick();
             return;
         }
+
         createComputationThread().start();
     }
 
@@ -156,6 +155,18 @@ public class DynamicSineWaveView extends View {
         baseWaveAmplitudeFactor = factor;
     }
 
+    public float getBaseWaveAmplitudeFactor() {
+        return baseWaveAmplitudeFactor;
+    }
+
+    // Update just one frame.
+    public void requestUpdateFrame() {
+        synchronized (requestCondition) {
+            requestFutureChange = true;
+            requestCondition.notify();
+        }
+    }
+
     @Override
     public void onDraw(Canvas canvas) {
         if (transferPathsQueue.isEmpty())
@@ -168,18 +179,15 @@ public class DynamicSineWaveView extends View {
                     " not match the paints size " + wavePaints.size());
         }
 
-        canvas.save();
-        canvas.translate(0, viewHeight / 2);
-        canvas.scale(viewWidth, viewHeight);
+        wavePathScale.setScale(viewWidth, viewHeight * baseWaveAmplitudeFactor);
+        wavePathScale.postTranslate(0, viewHeight / 2);
         for (int i = 0; i < paths.size(); i++) {
             Path path = paths.get(i);
             Paint paint = wavePaints.get(i);
 
-            mappedPaint.set(paint);
-            mappedPaint.setStrokeWidth(paint.getStrokeWidth() / viewWidth);
-            canvas.drawPath(path, mappedPaint);
+            path.transform(wavePathScale);
+            canvas.drawPath(path, paint);
         }
-        canvas.restore();
     }
 
     @Override
@@ -249,7 +257,7 @@ public class DynamicSineWaveView extends View {
         Wave baseWave = waveList.get(0);
         waveList.remove(0);
 
-        float normal = baseWaveAmplitudeFactor * baseWave.amplitude / maxAmplitude;
+        float normal = baseWave.amplitude / maxAmplitude;
         List<PointF> baseWavePoints = generateSineWave(baseWave.amplitude, baseWave.cycle, - baseWave.speed * t, pointCount);
 
         for (Wave w : waveList) {
