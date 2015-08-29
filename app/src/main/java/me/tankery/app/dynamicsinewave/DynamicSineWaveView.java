@@ -8,6 +8,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PointF;
 import android.os.SystemClock;
+import android.support.v4.view.ViewCompat;
 import android.util.AttributeSet;
 import android.view.View;
 
@@ -73,7 +74,7 @@ public class DynamicSineWaveView extends View {
     private Runnable animateTicker = new Runnable() {
         public void run() {
             requestUpdateFrame();
-            postDelayed(this, 20); // 20ms == 60fps
+            ViewCompat.postOnAnimation(DynamicSineWaveView.this, this);
         }
     };
 
@@ -144,7 +145,7 @@ public class DynamicSineWaveView extends View {
     public void startAnimation() {
         startAnimateTime = SystemClock.uptimeMillis();
         removeCallbacks(animateTicker);
-        post(animateTicker);
+        ViewCompat.postOnAnimation(this, animateTicker);
     }
 
     public void stopAnimation() {
