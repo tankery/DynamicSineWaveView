@@ -48,6 +48,8 @@ public class DynamicSineWaveView extends View {
     private final List<Wave> waveConfigs = new ArrayList<>();
     private final List<Paint> wavePaints = new ArrayList<>();
     private final Matrix wavePathScale = new Matrix();
+    private List<Path> currentPaths = new ArrayList<>();
+    private Path drawingPath = new Path();
 
     private int viewWidth = 0;
     private int viewHeight = 0;
@@ -129,6 +131,7 @@ public class DynamicSineWaveView extends View {
             paint.setColor(color);
             paint.setStrokeWidth(stroke);
             paint.setStyle(Paint.Style.STROKE);
+            paint.setAntiAlias(true);
             wavePaints.add(paint);
         }
 
@@ -170,24 +173,27 @@ public class DynamicSineWaveView extends View {
 
     @Override
     public void onDraw(Canvas canvas) {
-        if (transferPathsQueue.isEmpty())
-            return;
+        if (!transferPathsQueue.isEmpty()) {
+            currentPaths = transferPathsQueue.poll();
 
-        List<Path> paths = transferPathsQueue.poll();
-
-        if (paths.size() != wavePaints.size()) {
-            throw new RuntimeException("Generated paths size " + paths.size() +
-                    " not match the paints size " + wavePaints.size());
+            if (currentPaths.size() != wavePaints.size()) {
+                throw new RuntimeException("Generated paths size " + currentPaths.size() +
+                        " not match the paints size " + wavePaints.size());
+            }
         }
+
+        if (currentPaths.isEmpty())
+            return;
 
         wavePathScale.setScale(viewWidth, viewHeight * baseWaveAmplitudeFactor);
         wavePathScale.postTranslate(0, viewHeight / 2);
-        for (int i = 0; i < paths.size(); i++) {
-            Path path = paths.get(i);
+        for (int i = 0; i < currentPaths.size(); i++) {
+            Path path = currentPaths.get(i);
             Paint paint = wavePaints.get(i);
 
-            path.transform(wavePathScale);
-            canvas.drawPath(path, paint);
+            drawingPath.set(path);
+            drawingPath.transform(wavePathScale);
+            canvas.drawPath(drawingPath, paint);
         }
     }
 
