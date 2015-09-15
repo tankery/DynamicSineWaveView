@@ -118,7 +118,7 @@ public class DynamicSineWaveView extends View {
      * @param cycle contains how many cycles in scene
      * @param speed space per second, relative to view. X means the wave move X times of width per second
      * @param color the wave color, ignored when add the 'base wave'
-     * @param stroke wave stroke width, in dimension, ignored when add the 'base wave'
+     * @param stroke wave stroke width, in pixel, ignored when add the 'base wave'
      * @return wave count (exclude the base wave).
      */
     public int addWave(float amplitude, float cycle, float speed, int color, float stroke) {
