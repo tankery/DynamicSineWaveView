@@ -57,6 +57,6 @@ wavesView.stopAnimation();
 What's more, you can even change the `amplitude` when need (useful when you need to response for a voice input):
 
 ``` java
-wavesView.setBaseWaveAmplitudeFactor(1);
+wavesView.setBaseWaveAmplitudeScale(1);
 ```
 
