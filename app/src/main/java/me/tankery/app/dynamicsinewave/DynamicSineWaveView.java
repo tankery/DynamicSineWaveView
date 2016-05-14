@@ -54,7 +54,7 @@ public class DynamicSineWaveView extends View {
     private int viewWidth = 0;
     private int viewHeight = 0;
 
-    private float baseWaveAmplitudeFactor = 0.1f;
+    private float baseWaveAmplitudeScale = 1f;
 
     /**
      * The computation result, a set of wave path can draw.
@@ -98,9 +98,9 @@ public class DynamicSineWaveView extends View {
     private void init() {
         if (isInEditMode()) {
             addWave(0.5f, 0.5f, 0, 0, 0);
-            addWave(0.5f, 2.5f, 0, Color.YELLOW, 2);
+            addWave(0.5f, 2.5f, 0, Color.BLUE, 2);
             addWave(0.3f, 2f, 0, Color.RED, 2);
-            setBaseWaveAmplitudeFactor(1);
+            setBaseWaveAmplitudeScale(1);
             tick();
             return;
         }
@@ -112,7 +112,7 @@ public class DynamicSineWaveView extends View {
      * Add new wave to the view.
      *
      * The first added wave will become the 'base wave', which ignored the color & stroke, and
-     * other wave will multiple with the 'base wave'.
+     * other wave will multiple with the 'base wave'. 'base wave' is used to shape the waves.
      *
      * @param amplitude wave amplitude, relative to view, range from 0 ~ 0.5
      * @param cycle contains how many cycles in scene
@@ -145,30 +145,51 @@ public class DynamicSineWaveView extends View {
         wavePaints.clear();
     }
 
+    /**
+     * Start to animate the sine waves.
+     */
     public void startAnimation() {
         startAnimateTime = SystemClock.uptimeMillis();
         removeCallbacks(animateTicker);
         ViewCompat.postOnAnimation(this, animateTicker);
     }
 
+    /**
+     * Stop the sine waves.
+     */
     public void stopAnimation() {
         removeCallbacks(animateTicker);
     }
 
-    public void setBaseWaveAmplitudeFactor(float factor) {
-        baseWaveAmplitudeFactor = factor;
+    /**
+     * Scale sine waves.
+     * @param scale set the scale for sine waves.
+     */
+    public void setBaseWaveAmplitudeScale(float scale) {
+        baseWaveAmplitudeScale = scale;
     }
 
-    public float getBaseWaveAmplitudeFactor() {
-        return baseWaveAmplitudeFactor;
+    /**
+     * Get the scale of sine waves.
+     */
+    public float getBaseWaveAmplitudeScale() {
+        return baseWaveAmplitudeScale;
     }
 
-    // Update just one frame.
+    /**
+     * Update just one frame.
+     */
     public void requestUpdateFrame() {
         synchronized (requestCondition) {
             requestFutureChange = true;
             requestCondition.notify();
         }
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        stopAnimation();
+        super.onDetachedFromWindow();
     }
 
     @Override
@@ -185,7 +206,7 @@ public class DynamicSineWaveView extends View {
         if (currentPaths.isEmpty())
             return;
 
-        wavePathScale.setScale(viewWidth, viewHeight * baseWaveAmplitudeFactor);
+        wavePathScale.setScale(viewWidth, viewHeight * baseWaveAmplitudeScale);
         wavePathScale.postTranslate(0, viewHeight / 2);
         for (int i = 0; i < currentPaths.size(); i++) {
             Path path = currentPaths.get(i);
